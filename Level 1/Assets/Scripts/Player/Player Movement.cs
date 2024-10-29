@@ -3,7 +3,9 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     [SerializeField] private float speed;
-    [SerializeField] private float jumpForce; // Separate variable for jump force
+    [SerializeField] private float jumpForce;
+    [SerializeField] private float wallSlideSpeed = 0.5f;  // How fast player slides down a wall
+    [SerializeField] private float wallJumpLerp = 10f;     // Smoothing factor for wall jumps
     private Rigidbody2D body;
     private Animator anim;
     private BoxCollider2D boxCollider;
@@ -24,86 +26,87 @@ public class PlayerMovement : MonoBehaviour
         // Get horizontal input
         horizontalInput = Input.GetAxis("Horizontal");
 
-        // Flip character only if moving and not on a wall or wall jumping
+        // Flip character based on movement direction
         if (!onWall() && horizontalInput != 0)
         {
-            if (horizontalInput > 0.01f)
-                transform.localScale = Vector3.one; // Facing right
-            else if (horizontalInput < -0.01f)
-                transform.localScale = new Vector3(-1, 1, 1); // Facing left
+            transform.localScale = new Vector3(Mathf.Sign(horizontalInput), 1, 1);
         }
 
         // Set animator parameters
         anim.SetBool("Run", horizontalInput != 0);
         anim.SetBool("Ground", isGrounded());
 
-        // Handle movement and jumps, with cooldown for wall jumps
-        if (wallJumpCooldown < 0.3f)
+        // Wall jump cooldown timer
+        if (wallJumpCooldown > 0)
+        {
+            wallJumpCooldown -= Time.deltaTime;
+        }
+
+        // Movement and jump logic
+        if (wallJumpCooldown <= 0)
         {
             // Horizontal movement
             body.velocity = new Vector2(horizontalInput * speed, body.velocity.y);
 
-            // On-wall logic
+            // Wall sliding logic: slow down when on a wall
             if (onWall() && !isGrounded())
             {
-                body.gravityScale = 1;  // Reduced gravity for wall sliding
-                body.velocity = new Vector2(0, body.velocity.y * 0.8f);  // Apply a small downward velocity for sliding
-            }
-            else
-            {
-                body.gravityScale = 3;  // Re-enable gravity when not on a wall
+                // Slow down descent when sliding
+                body.velocity = new Vector2(body.velocity.x, Mathf.Clamp(body.velocity.y, -wallSlideSpeed, float.MaxValue));
             }
 
-            // Jump if space is pressed
+            // Jumping logic
             if (Input.GetKey(KeyCode.Space))
+            {
                 Jump();
+            }
         }
         else
         {
-            // Cooldown timer after a wall jump
-            wallJumpCooldown += Time.deltaTime;
+            // During wall jump cooldown, lerp towards the desired velocity for smoother jumps
+            body.velocity = Vector2.Lerp(body.velocity, new Vector2(horizontalInput * speed, body.velocity.y), wallJumpLerp * Time.deltaTime);
         }
     }
 
     private void Jump()
     {
-        // Ground jump
         if (isGrounded())
         {
-            body.velocity = new Vector2(body.velocity.x, jumpForce);  // Apply jump force
+            // Ground jump
+            body.velocity = new Vector2(body.velocity.x, jumpForce);
             anim.SetTrigger("Jump");
-            wallJumpCooldown = 0;  // Reset cooldown
         }
-        // Wall jump
         else if (onWall() && !isGrounded())
         {
-            if (horizontalInput == 0)
+            // Wall jump logic
+            if (horizontalInput != 0)
             {
-                // Jump away from the wall if no horizontal input
-                body.velocity = new Vector2(-Mathf.Sign(transform.localScale.x) * 7, jumpForce);
+                // Diagonal wall jump away from the wall
+                body.velocity = new Vector2(horizontalInput * speed * 1.2f, jumpForce);
             }
             else
             {
-                // Diagonal wall jump with horizontal input
-                body.velocity = new Vector2(horizontalInput * speed * 0.8f, jumpForce);
+                // Jump straight off the wall with more force
+                body.velocity = new Vector2(-Mathf.Sign(transform.localScale.x) * 8f, jumpForce);
             }
-            wallJumpCooldown = 0;  // Reset cooldown after wall jump
+            wallJumpCooldown = 0.2f; // Small cooldown to prevent immediate second wall jump
         }
     }
 
     private bool isGrounded()
     {
-        // BoxCast to detect if player is on the ground
+        // BoxCast to check if grounded
         RaycastHit2D raycastHit = Physics2D.BoxCast(boxCollider.bounds.center, boxCollider.bounds.size, 0, Vector2.down, 0.1f, groundLayer);
         return raycastHit.collider != null;
     }
 
     private bool onWall()
     {
-        // BoxCast to detect if player is on a wall
+        // BoxCast to check if on a wall
         RaycastHit2D raycastHit = Physics2D.BoxCast(boxCollider.bounds.center, boxCollider.bounds.size, 0, new Vector2(transform.localScale.x, 0), 0.1f, wallLayer);
         return raycastHit.collider != null;
     }
+
     public bool canAttack()
     {
         return horizontalInput == 0 && isGrounded() && !onWall();
