@@ -19,15 +19,20 @@ public class PlayerRespawn : MonoBehaviour
     {
         if (other.CompareTag("CheckPoint"))
         {
-            // Save the checkpoint position
-            respawnPoint = other.transform.position;
-            Debug.Log("Checkpoint reached, respawn point set.");
+            Checkpoint checkpoint = other.GetComponent<Checkpoint>();
+            if (checkpoint != null && !checkpoint.isActivated)
+            {
+                // Save the checkpoint position and activate it
+                respawnPoint = other.transform.position;
+                checkpoint.isActivated = true;  // Mark checkpoint as activated
+                Debug.Log("New checkpoint reached, respawn point updated.");
+            }
         }
     }
 
     public void Respawn()
     {
-        // Move the player to the respawn point
+        // Move the player to the current respawn point
         transform.position = respawnPoint;
         Debug.Log("Player respawned.");
 

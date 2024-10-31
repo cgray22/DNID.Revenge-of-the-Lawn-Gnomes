@@ -5,26 +5,22 @@ public class EnemyAI : MonoBehaviour
     public Transform player;           // Reference to the player
     public float attackRange = 1.5f;   // Range at which enemy attacks
     public float detectionRange = 5f;  // Range at which the enemy detects the player
-    public float loiterSpeed = 1f;     // Speed at which the enemy loiters
-    public float loiterRange = 1f;     // The small range the enemy loiters in
+    public float runSpeed = 3f;        // Speed at which the enemy runs towards the player
     public float damageAmount = 1f;    // Amount of damage the enemy deals
     public float attackCooldown = 1f;  // Time between attacks in seconds
     private Animator animator;         // Reference to Animator component
     private Health playerHealth;       // Reference to the player's Health script
     private float lastAttackTime;      // Tracks when the enemy last attacked
-    private bool isLoitering = true;   // Whether the enemy is currently loitering
-    private Vector3 originalPosition;  // The original position the enemy started at
-    private Vector3 loiterTarget;      // The target position for loitering
     private bool isDetectingPlayer = false; // Whether the player is detected
+    private Vector3 idlePosition;      // Position where the enemy idles
 
     void Start()
     {
         animator = GetComponent<Animator>();
         playerHealth = player.GetComponent<Health>();
         lastAttackTime = -attackCooldown;
-        originalPosition = transform.position;
-        SetLoiterTarget();
-        FaceLeft();
+        idlePosition = transform.position; // Store the original idle position
+        FaceLeft(); // Ensure the enemy is facing the default direction
     }
 
     void Update()
@@ -35,63 +31,41 @@ public class EnemyAI : MonoBehaviour
         // If player is in detection range but not in attack range
         if (distanceToPlayer <= detectionRange && distanceToPlayer > attackRange)
         {
-            StopLoitering();
             isDetectingPlayer = true;
-            animator.SetBool("isMoving", false);  // Stop the running animation
-            animator.SetBool("isAttacking", false); // Attack animation not triggered yet
+            animator.SetBool("isMoving", true);    // Play running animation
+            animator.SetBool("isAttacking", false); // Stop attack animation
+            MoveTowardsPlayer();
         }
         // If player is in attack range
         else if (distanceToPlayer <= attackRange)
         {
-            StopLoitering();
             isDetectingPlayer = true;
-            animator.SetBool("isMoving", false);  // Stop moving
+            animator.SetBool("isMoving", false);    // Stop running
             animator.SetBool("isAttacking", true);  // Play attack animation
             TryToAttackPlayer();
         }
-        // If player is outside detection range, loiter
+        // If player is outside detection range, go idle
         else
         {
-            isDetectingPlayer = false;
-            Loiter();
-            animator.SetBool("isAttacking", false);  // Ensure no attacking while loitering
-            animator.SetBool("isMoving", true);  // Play running animation during loitering
+            if (isDetectingPlayer)
+            {
+                // Reset to idle state when player exits detection range
+                isDetectingPlayer = false;
+                animator.SetBool("isMoving", false);    // Stop running animation
+                animator.SetBool("isAttacking", false); // Stop attack animation
+                ReturnToIdlePosition();
+            }
         }
     }
 
-    // Loitering behavior when the player is not detected
-    void Loiter()
+    // Move towards the player when detected
+    void MoveTowardsPlayer()
     {
-        if (!isLoitering) return;
+        Vector3 direction = (player.position - transform.position).normalized;
+        transform.position += direction * runSpeed * Time.deltaTime;
 
-        // Move towards the loiter target
-        transform.position = Vector3.MoveTowards(transform.position, loiterTarget, loiterSpeed * Time.deltaTime);
-
-        // If the enemy reaches the loiter target, pick a new target
-        if (Vector3.Distance(transform.position, loiterTarget) < 0.1f)
-        {
-            SetLoiterTarget();
-        }
-    }
-
-    // Stop loitering when the player is detected
-    void StopLoitering()
-    {
-        if (isLoitering)
-        {
-            isLoitering = false;  // Enemy should stop loitering when detecting the player
-            animator.SetBool("isMoving", false);  // Stop the running animation
-        }
-    }
-
-    // Set a new loiter target within the small loiter range
-    void SetLoiterTarget()
-    {
-        float randomOffset = Random.Range(-loiterRange, loiterRange);
-        loiterTarget = new Vector3(originalPosition.x + randomOffset, originalPosition.y, originalPosition.z);
-
-        // Face the direction of the loiter target
-        FaceDirection(loiterTarget - transform.position);
+        // Face the direction of the player
+        FaceDirection(direction);
     }
 
     // Attempt to attack the player
@@ -111,6 +85,15 @@ public class EnemyAI : MonoBehaviour
         {
             playerHealth.TakeDamage(damageAmount);
         }
+    }
+
+    // Move the enemy back to the idle position
+    void ReturnToIdlePosition()
+    {
+        transform.position = Vector3.MoveTowards(transform.position, idlePosition, runSpeed * Time.deltaTime);
+
+        // Face the direction back to the idle position
+        FaceDirection(idlePosition - transform.position);
     }
 
     // Face a given direction (left or right)
